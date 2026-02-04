@@ -89,7 +89,8 @@ def process_document(file_path, document_id, producer_id, doc_name):
         db_chunk = DocumentChunk(
             document_id=document_id,
             chunk_index=i,
-            page_number=chunk['page'],
+            source_reference=f"Page {chunk['page']}",
+            chunk_metadata={'page': chunk['page']},
             chunk_text=chunk['text'],
             vector_id=vector_id
         )
