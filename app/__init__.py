@@ -23,6 +23,7 @@ def create_app(config_name=None):
     from app.routes.chat import bp as chat_bp
     from app.routes.seed import bp as seed_bp
     from app.routes.documents import bp as documents_bp
+    from app.routes.cleanup import bp as cleanup_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -30,8 +31,6 @@ def create_app(config_name=None):
     app.register_blueprint(chat_bp, url_prefix='/api')
     app.register_blueprint(seed_bp, url_prefix='/api')
     app.register_blueprint(documents_bp, url_prefix='/api/documents')
+    app.register_blueprint(cleanup_bp, url_prefix='/api/cleanup')
 
     return app
-
-    from app.routes.cleanup import bp as cleanup_bp
-    app.register_blueprint(cleanup_bp, url_prefix='/api/cleanup')
