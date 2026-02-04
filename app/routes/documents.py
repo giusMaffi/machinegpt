@@ -1,15 +1,15 @@
-"""Document management routes"""
+"""Document upload and management routes"""
+import os
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from app import db
-from app.models.document import Document
+from app.models import Document
 from app.utils.auth import token_required
 from app.utils.document_processor import process_document
-import os
 
 bp = Blueprint('documents', __name__)
 
-ALLOWED_EXTENSIONS = {'pdf', 'txt'}
+ALLOWED_EXTENSIONS = {'pdf', 'txt', 'doc', 'docx'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -32,13 +32,26 @@ def upload_document():
     
     # Get metadata
     doc_name = request.form.get('doc_name', file.filename)
-    model_id = request.form.get('model_id', 1)  # Default to model 1
+    model_id = request.form.get('model_id', 1)
     
     try:
         # Save file temporarily
         filename = secure_filename(file.filename)
-        temp_path = f"/tmp/{filename}"
+        temp_path = f'/tmp/{filename}'
         file.save(temp_path)
+        
+        # Extract file info
+        file_extension = os.path.splitext(filename)[1].lower()
+        mime_type = file.content_type or 'application/octet-stream'
+        
+        # Determine file type
+        file_type_map = {
+            '.pdf': 'pdf',
+            '.txt': 'text',
+            '.doc': 'document',
+            '.docx': 'document'
+        }
+        file_type = file_type_map.get(file_extension, 'unknown')
         
         # Create document record
         document = Document(
@@ -46,6 +59,9 @@ def upload_document():
             model_id=int(model_id),
             title=doc_name,
             original_filename=filename,
+            file_type=file_type,
+            mime_type=mime_type,
+            file_extension=file_extension,
             doc_type='manual',
             processing_status='processing'
         )
@@ -72,11 +88,11 @@ def upload_document():
             'document_id': document.id,
             'status': 'completed',
             'chunks_created': result['total_chunks'],
-            'processing_time_ms': result['processing_time_ms']
+            'message': 'Document uploaded and processed successfully'
         }), 201
         
     except Exception as e:
-        if document:
-            document.processing_status = 'failed'
-            db.session.commit()
-        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+        db.session.rollback()
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({'error': str(e)}), 500
