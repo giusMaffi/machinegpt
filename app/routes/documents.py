@@ -75,6 +75,8 @@ def upload_document():
             file_extension=file_extension,
             file_hash=file_hash,
             file_size_bytes=file_size,
+            file_path=temp_path,
+            source_type='manual_upload',
             doc_type='manual',
             processing_status='processing'
         )
