@@ -1,55 +1,27 @@
-# MachineGPT - Python Dependencies
-# Python 3.11+
-
-# Web Framework
 Flask==3.0.0
 Flask-CORS==4.0.0
-
-# Database
 psycopg2-binary==2.9.9
 SQLAlchemy==2.0.23
 Flask-SQLAlchemy==3.1.1
 alembic==1.13.0
-
-# Authentication
 Flask-Login==0.6.3
 Flask-Bcrypt==1.0.1
 PyJWT==2.8.0
-
-# API Clients
 anthropic==0.40.0
 voyageai==0.2.3
 pinecone==5.0.0
-
-# Document Processing
 PyPDF2==3.0.1
 python-docx==1.1.0
 pandas==2.1.4
 openpyxl==3.1.2
-
-# Utilities
 python-dotenv==1.0.0
 requests==2.31.0
 redis==5.0.1
-
-# Validation
 pydantic==2.5.3
-
-# Testing
 pytest==7.4.3
 pytest-cov==4.1.0
-
-# Deployment
 gunicorn==21.2.0
-
-# Monitoring
 sentry-sdk[flask]==1.39.1
-
-# Rate Limiting
 Flask-Limiter==3.5.0
-
-# File handling
 werkzeug==3.0.1
-
-# Migrations
 Flask-Migrate==4.0.5
