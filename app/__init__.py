@@ -34,3 +34,4 @@ def create_app(config_name=None):
     # Import documents blueprint
     from app.routes.documents import bp as documents_bp
     app.register_blueprint(documents_bp, url_prefix='/api/documents')
+...
