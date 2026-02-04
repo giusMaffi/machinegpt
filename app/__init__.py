@@ -30,3 +30,7 @@ def create_app(config_name=None):
     app.register_blueprint(seed_bp, url_prefix='/api')
 
     return app
+
+    # Import documents blueprint
+    from app.routes.documents import bp as documents_bp
+    app.register_blueprint(documents_bp, url_prefix='/api/documents')
