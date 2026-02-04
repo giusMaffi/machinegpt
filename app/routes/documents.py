@@ -1,5 +1,6 @@
 """Document upload and management routes"""
 import os
+import hashlib
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from app import db
@@ -13,6 +14,14 @@ ALLOWED_EXTENSIONS = {'pdf', 'txt', 'doc', 'docx'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def calculate_file_hash(file_path):
+    """Calculate SHA256 hash of file"""
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
 
 @bp.route('/upload', methods=['POST'])
 @token_required
@@ -43,6 +52,8 @@ def upload_document():
         # Extract file info
         file_extension = os.path.splitext(filename)[1].lower()
         mime_type = file.content_type or 'application/octet-stream'
+        file_size = os.path.getsize(temp_path)
+        file_hash = calculate_file_hash(temp_path)
         
         # Determine file type
         file_type_map = {
@@ -62,6 +73,8 @@ def upload_document():
             file_type=file_type,
             mime_type=mime_type,
             file_extension=file_extension,
+            file_hash=file_hash,
+            file_size_bytes=file_size,
             doc_type='manual',
             processing_status='processing'
         )
