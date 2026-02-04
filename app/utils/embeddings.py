@@ -2,8 +2,12 @@
 import os
 import voyageai
 
-# Initialize client with API key from environment
-client = voyageai.Client(api_key=os.environ.get('VOYAGE_API_KEY'))
+def get_client():
+    """Get Voyage AI client with API key from environment"""
+    api_key = os.environ.get('VOYAGE_API_KEY')
+    if not api_key:
+        raise Exception("VOYAGE_API_KEY not found in environment")
+    return voyageai.Client(api_key=api_key)
 
 def generate_embeddings(texts, input_type="document"):
     """
@@ -20,6 +24,7 @@ def generate_embeddings(texts, input_type="document"):
         return []
     
     try:
+        client = get_client()
         response = client.embed(
             texts=texts,
             model="voyage-3",
