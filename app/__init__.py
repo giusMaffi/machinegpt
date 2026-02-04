@@ -32,3 +32,6 @@ def create_app(config_name=None):
     app.register_blueprint(documents_bp, url_prefix='/api/documents')
 
     return app
+
+    from app.routes.cleanup import bp as cleanup_bp
+    app.register_blueprint(cleanup_bp, url_prefix='/api/cleanup')
