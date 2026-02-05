@@ -10,33 +10,21 @@ bp = Blueprint('query', __name__)
 @bp.route('/', methods=['POST'])
 @token_required
 def query_ai():
-    """
-    Query the AI with a question
-    
-    Request:
-    {
-        "question": "What is error E42?",
-        "machine_id": 1
-    }
-    
-    Response:
-    {
-        "answer": "...",
-        "sources": [...],
-        "response_time_ms": 2340
-    }
-    """
+    """Query the AI with a question"""
     try:
         data = request.get_json()
         
-        # Validate
         if not data or 'question' not in data:
             return jsonify({'error': 'Question required'}), 400
         
         question = data['question']
         machine_id = data.get('machine_id')
         
-        # Execute RAG query
+        # SECURITY CHECK
+        if machine_id:
+            if not hasattr(g, 'machine_ids') or machine_id not in g.machine_ids:
+                return jsonify({'error': 'Access denied to this machine'}), 403
+        
         rag = RAGEngine()
         result = rag.query(
             question=question,
@@ -44,7 +32,6 @@ def query_ai():
             machine_id=machine_id
         )
         
-        # Save to database
         query_record = Query(
             producer_id=g.producer_id,
             user_id=g.current_user_id,
@@ -79,15 +66,7 @@ def query_ai():
 @bp.route('/feedback', methods=['POST'])
 @token_required
 def submit_feedback():
-    """
-    Submit feedback for a query
-    
-    Request:
-    {
-        "query_id": 123,
-        "feedback": 1  // 1 = thumbs up, -1 = thumbs down
-    }
-    """
+    """Submit feedback for a query"""
     try:
         data = request.get_json()
         query_id = data.get('query_id')
@@ -100,7 +79,6 @@ def submit_feedback():
         if not query:
             return jsonify({'error': 'Query not found'}), 404
         
-        # Verify ownership
         if query.user_id != g.current_user_id:
             return jsonify({'error': 'Access denied'}), 403
         
