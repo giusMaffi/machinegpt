@@ -27,7 +27,7 @@ def generate_embeddings(texts, input_type="document"):
         client = get_client()
         response = client.embed(
             texts=texts,
-            model="voyage-3",
+            model="voyage-2",
             input_type=input_type
         )
         return response.embeddings
