@@ -56,3 +56,13 @@ def inspect_vectors():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@bp.route('/cleanup-doc/<int:doc_id>', methods=['POST'])
+def cleanup_doc(doc_id):
+    """Delete specific document from Pinecone"""
+    try:
+        index = get_pinecone_index()
+        namespace = "producer_1"
+        index.delete(filter={"doc_id": float(doc_id)}, namespace=namespace)
+        return jsonify({'message': f'Doc {doc_id} cleaned', 'namespace': namespace}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
