@@ -1,0 +1,353 @@
+"""
+Demo Tenants Seed Script
+Created: 5 Feb 2026
+
+Purpose: Create sample producers with realistic data for demo
+
+Tenants:
+1. Amotek - Packaging machinery producer
+2. IMA - Pharmaceutical machinery producer
+
+Run this ONCE to populate demo data:
+    python scripts/seed_demo_tenants.py
+"""
+
+import sys
+import os
+
+# Add parent directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from app import create_app, db
+from app.models import (
+    Producer, EndCustomer, User, MachineModel, 
+    MachineInstance, ProducerAdmin
+)
+import bcrypt
+from datetime import datetime, timedelta
+import random
+import string
+
+
+def generate_activation_code():
+    """Generate random activation code."""
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(24))
+
+
+def seed_demo_tenants():
+    """Create two demo producers with full data."""
+    
+    print("🌱 Seeding demo tenants...")
+    
+    # ========================================================================
+    # TENANT 1: AMOTEK
+    # ========================================================================
+    
+    print("\n📦 Creating Amotek...")
+    
+    amotek = Producer(
+        company_name="Amotek",
+        slug="amotek",
+        logo_url="https://via.placeholder.com/200x80/e63946/ffffff?text=AMOTEK",
+        primary_color="#e63946",
+        secondary_color="#457b9d",
+        support_email="support@amotek.com",
+        support_phone="+39 0521 123 4567",
+        status="active"
+    )
+    db.session.add(amotek)
+    db.session.flush()  # Get ID
+    
+    print(f"✅ Amotek created (ID: {amotek.id})")
+    
+    # Amotek Admin
+    amotek_admin_user = User(
+        email="admin@amotek.com",
+        password_hash=bcrypt.hashpw("amotek123".encode(), bcrypt.gensalt()).decode(),
+        full_name="Marco Rossi",
+        role="admin",
+        language_preference="it",
+        is_active=True,
+        email_verified=True
+    )
+    db.session.add(amotek_admin_user)
+    db.session.flush()
+    
+    amotek_admin = ProducerAdmin(
+        producer_id=amotek.id,
+        user_id=amotek_admin_user.id,
+        role="super_admin"
+    )
+    db.session.add(amotek_admin)
+    
+    print(f"✅ Amotek admin: admin@amotek.com / amotek123")
+    
+    # Amotek Machine Models
+    models_amotek = [
+        {
+            "model_name": "X500",
+            "model_code": "AMK-X500",
+            "category": "packaging",
+            "description": "High-speed horizontal flow wrapper",
+            "specifications": {
+                "max_speed": "120 packages/min",
+                "film_width": "350-500mm",
+                "product_length": "50-300mm",
+                "power": "5.5 kW"
+            }
+        },
+        {
+            "model_name": "A300",
+            "model_code": "AMK-A300",
+            "category": "packaging",
+            "description": "Automatic cartoning machine",
+            "specifications": {
+                "max_speed": "80 cartons/min",
+                "carton_size": "50-250mm",
+                "power": "3.5 kW"
+            }
+        }
+    ]
+    
+    for model_data in models_amotek:
+        model = MachineModel(
+            producer_id=amotek.id,
+            **model_data
+        )
+        db.session.add(model)
+        print(f"  ✅ Model: {model_data['model_name']}")
+    
+    db.session.flush()
+    
+    # Amotek End Customers
+    end_customers_amotek = [
+        {
+            "company_name": "Ferrero SpA",
+            "country_code": "IT",
+            "industry": "food",
+            "city": "Alba"
+        },
+        {
+            "company_name": "Barilla G. e R.",
+            "country_code": "IT",
+            "industry": "food",
+            "city": "Parma"
+        },
+        {
+            "company_name": "Lavazza",
+            "country_code": "IT",
+            "industry": "food",
+            "city": "Torino"
+        }
+    ]
+    
+    for ec_data in end_customers_amotek:
+        end_customer = EndCustomer(
+            producer_id=amotek.id,
+            **ec_data,
+            status="active"
+        )
+        db.session.add(end_customer)
+        db.session.flush()
+        
+        print(f"  ✅ End customer: {ec_data['company_name']}")
+        
+        # Create sample user for this end customer
+        user = User(
+            end_customer_id=end_customer.id,
+            email=f"operator@{ec_data['company_name'].lower().replace(' ', '')}.com",
+            password_hash=bcrypt.hashpw("demo123".encode(), bcrypt.gensalt()).decode(),
+            full_name=f"Operator {ec_data['company_name'].split()[0]}",
+            role="operator",
+            language_preference="it",
+            is_active=True,
+            email_verified=True
+        )
+        db.session.add(user)
+        db.session.flush()
+        
+        # Create machine instance
+        x500_model = MachineModel.query.filter_by(
+            producer_id=amotek.id,
+            model_name="X500"
+        ).first()
+        
+        if x500_model:
+            serial = f"AMK-X500-2024-{random.randint(100000, 999999)}"
+            machine = MachineInstance(
+                producer_id=amotek.id,
+                model_id=x500_model.id,
+                end_customer_id=end_customer.id,
+                serial_number=serial,
+                activation_code=generate_activation_code(),
+                is_activated=True,
+                activated_at=datetime.utcnow() - timedelta(days=random.randint(30, 180)),
+                activated_by=user.id,
+                installation_site=f"{ec_data['city']} Plant",
+                installation_date=datetime.utcnow() - timedelta(days=random.randint(180, 365)),
+                service_tier="premium"
+            )
+            db.session.add(machine)
+            db.session.flush()
+            
+            # Grant user access to machine
+            from app.models import UserMachineAccess
+            access = UserMachineAccess(
+                user_id=user.id,
+                machine_instance_id=machine.id
+            )
+            db.session.add(access)
+            
+            print(f"    ✅ Machine: {serial}")
+    
+    # ========================================================================
+    # TENANT 2: IMA
+    # ========================================================================
+    
+    print("\n💊 Creating IMA...")
+    
+    ima = Producer(
+        company_name="IMA Group",
+        slug="ima",
+        logo_url="https://via.placeholder.com/200x80/457b9d/ffffff?text=IMA",
+        primary_color="#457b9d",
+        secondary_color="#1d3557",
+        support_email="support@ima.it",
+        support_phone="+39 051 123 4567",
+        status="active"
+    )
+    db.session.add(ima)
+    db.session.flush()
+    
+    print(f"✅ IMA created (ID: {ima.id})")
+    
+    # IMA Admin
+    ima_admin_user = User(
+        email="admin@ima.it",
+        password_hash=bcrypt.hashpw("ima123".encode(), bcrypt.gensalt()).decode(),
+        full_name="Giulia Bianchi",
+        role="admin",
+        language_preference="it",
+        is_active=True,
+        email_verified=True
+    )
+    db.session.add(ima_admin_user)
+    db.session.flush()
+    
+    ima_admin = ProducerAdmin(
+        producer_id=ima.id,
+        user_id=ima_admin_user.id,
+        role="super_admin"
+    )
+    db.session.add(ima_admin)
+    
+    print(f"✅ IMA admin: admin@ima.it / ima123")
+    
+    # IMA Machine Models
+    models_ima = [
+        {
+            "model_name": "C90",
+            "model_code": "IMA-C90",
+            "category": "pharmaceutical",
+            "description": "Intermittent motion cartoner",
+            "specifications": {
+                "max_speed": "90 cartons/min",
+                "carton_format": "pharmaceutical",
+                "power": "4.5 kW"
+            }
+        },
+        {
+            "model_name": "B400",
+            "model_code": "IMA-B400",
+            "category": "pharmaceutical",
+            "description": "Blister packaging machine",
+            "specifications": {
+                "max_speed": "400 blisters/min",
+                "blister_format": "ALU/PVC",
+                "power": "12 kW"
+            }
+        }
+    ]
+    
+    for model_data in models_ima:
+        model = MachineModel(
+            producer_id=ima.id,
+            **model_data
+        )
+        db.session.add(model)
+        print(f"  ✅ Model: {model_data['model_name']}")
+    
+    db.session.flush()
+    
+    # IMA End Customers
+    end_customers_ima = [
+        {
+            "company_name": "Pfizer Manufacturing",
+            "country_code": "IT",
+            "industry": "pharmaceutical",
+            "city": "Ascoli Piceno"
+        },
+        {
+            "company_name": "Novartis",
+            "country_code": "IT",
+            "industry": "pharmaceutical",
+            "city": "Origgio"
+        }
+    ]
+    
+    for ec_data in end_customers_ima:
+        end_customer = EndCustomer(
+            producer_id=ima.id,
+            **ec_data,
+            status="active"
+        )
+        db.session.add(end_customer)
+        db.session.flush()
+        
+        print(f"  ✅ End customer: {ec_data['company_name']}")
+        
+        # Create sample user
+        user = User(
+            end_customer_id=end_customer.id,
+            email=f"operator@{ec_data['company_name'].lower().replace(' ', '')}.com",
+            password_hash=bcrypt.hashpw("demo123".encode(), bcrypt.gensalt()).decode(),
+            full_name=f"Tech {ec_data['company_name'].split()[0]}",
+            role="technician",
+            language_preference="en",
+            is_active=True,
+            email_verified=True
+        )
+        db.session.add(user)
+    
+    # Commit all
+    db.session.commit()
+    
+    print("\n✅ Demo tenants seeded successfully!")
+    print("\n" + "="*60)
+    print("DEMO CREDENTIALS:")
+    print("="*60)
+    print("\n🔐 AMOTEK:")
+    print(f"   Admin: admin@amotek.com / amotek123")
+    print(f"   Operator Ferrero: operator@ferrerospa.com / demo123")
+    print(f"   Operator Barilla: operator@barillag.er..com / demo123")
+    print(f"   Operator Lavazza: operator@lavazza.com / demo123")
+    print(f"\n🔐 IMA:")
+    print(f"   Admin: admin@ima.it / ima123")
+    print(f"   Operator Pfizer: operator@pfizermanufacturing.com / demo123")
+    print(f"   Operator Novartis: operator@novartis.com / demo123")
+    print("\n" + "="*60)
+
+
+if __name__ == "__main__":
+    app = create_app()
+    
+    with app.app_context():
+        # Check if already seeded
+        existing = Producer.query.filter_by(slug="amotek").first()
+        if existing:
+            print("⚠️  Demo tenants already exist!")
+            print("   Delete them first or use different slugs.")
+            sys.exit(1)
+        
+        seed_demo_tenants()

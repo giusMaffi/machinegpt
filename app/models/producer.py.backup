@@ -21,11 +21,6 @@ class Producer(db.Model):
     primary_color = db.Column(db.String(7), default='#1a56db')
     secondary_color = db.Column(db.String(7), default='#f59e0b')
     
-    
-    # Contact
-    support_email = db.Column(db.String(255))
-    support_phone = db.Column(db.String(50))
-
     # Custom domains
     custom_domain = db.Column(db.String(255))
     admin_domain = db.Column(db.String(255))
