@@ -1,4 +1,4 @@
-"""Query AI endpoint"""
+"""Query AI endpoint with multimodal support"""
 from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models.query import Query
@@ -50,6 +50,8 @@ def query_ai():
             'query_id': query_record.id,
             'answer': result['answer'],
             'sources': result['sources'],
+            'images': result.get('images', []),  # NEW: Images array
+            'has_images': result.get('has_images', False),  # NEW: Boolean flag
             'metadata': {
                 'response_time_ms': result['response_time_ms'],
                 'retrieval_time_ms': result.get('retrieval_time_ms', 0),

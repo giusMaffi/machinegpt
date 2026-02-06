@@ -34,6 +34,7 @@ def create_app(config_name=None):
     from app.routes.query import bp as query_bp
     from app.routes.admin_machines import bp as admin_machines_bp
     from app.routes.activation import bp as activation_bp
+    from app.routes.images import bp as images_bp
     
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -45,5 +46,6 @@ def create_app(config_name=None):
     app.register_blueprint(query_bp, url_prefix='/api/query')
     app.register_blueprint(admin_machines_bp, url_prefix='/api/admin')
     app.register_blueprint(activation_bp)
+    app.register_blueprint(images_bp)
     
     return app
