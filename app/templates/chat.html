@@ -126,6 +126,16 @@
 
 {% block scripts %}
 <script>
+
+// Helper to get cookie
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+
 // Global state
 let state = {
     machines: [],
@@ -137,7 +147,7 @@ let state = {
 
 // ✅ FIX: Helper function to get token with auto-redirect
 function getToken() {
-    const token = localStorage.getItem('access_token');
+    const token = getCookie('access_token');
     if (!token) {
         console.log('No token - redirecting to login');
         window.location.href = '/login';

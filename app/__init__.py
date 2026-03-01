@@ -16,6 +16,12 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     
+    # CSP for Alpine.js and inline scripts
+    @app.after_request
+    def set_csp(response):
+        response.headers['Content-Security-Policy'] = "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;"
+        return response
+    
     # Multi-tenant middleware (CRITICAL: must run before any route)
     from app.middleware import set_tenant_context
     
@@ -37,9 +43,9 @@ def create_app(config_name=None):
     from app.routes.images import bp as images_bp
     
     app.register_blueprint(health_bp)
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    app.register_blueprint(chat_bp, url_prefix='/api')
+    app.register_blueprint(chat_bp)
     app.register_blueprint(seed_bp, url_prefix='/api')
     app.register_blueprint(documents_bp, url_prefix='/api/documents')
     app.register_blueprint(cleanup_bp, url_prefix='/api/cleanup')

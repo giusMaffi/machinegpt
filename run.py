@@ -1,4 +1,7 @@
 """MachineGPT - Application Entry Point"""
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 from app import create_app
 
