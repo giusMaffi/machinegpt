@@ -81,12 +81,14 @@ def token_required(f):
     def decorated(*args, **kwargs):
         token = None
         
-        # Extract token from header
+        # Extract token from header OR cookie
         if 'Authorization' in request.headers:
             try:
                 token = request.headers['Authorization'].split(' ')[1]
             except IndexError:
                 return jsonify({'error': 'Invalid authorization header'}), 401
+        elif 'access_token' in request.cookies:
+            token = request.cookies.get('access_token')
         
         if not token:
             return jsonify({'error': 'Token missing'}), 401

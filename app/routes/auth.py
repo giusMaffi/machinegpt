@@ -1,4 +1,3 @@
-from flask import redirect, make_response
 """Authentication Routes"""
 from flask import Blueprint, request, jsonify, render_template
 from app import db
@@ -55,12 +54,18 @@ def login():
         access_token = generate_access_token(producer_admin, user_type='producer_admin')
         refresh_token = generate_refresh_token(producer_admin, user_type='producer_admin')
         
-        # Set token in cookie and redirect
-        resp = make_response(redirect('/chat'))
-        resp.set_cookie('access_token', access_token, httponly=False, max_age=900)
-        resp.set_cookie('refresh_token', refresh_token, httponly=True, max_age=2592000)
-        return resp
-        # End of producer_admin login
+        return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {
+                'id': producer_admin.id,
+                'email': producer_admin.email,
+                'full_name': producer_admin.full_name,
+                'role': producer_admin.role,
+                'user_type': 'producer_admin',
+                'is_active': producer_admin.is_active
+            }
+        }), 200
     
     # Try EndCustomer User
     user = User.query.filter_by(email=email).first()

@@ -127,11 +127,17 @@
 {% block scripts %}
 <script>
 
-// Helper to get cookie
-function getCookie(name) {
+// Helper to get token from localStorage OR cookie
+function getToken() {
+    // Try localStorage first
+    let token = localStorage.getItem('access_token');
+    if (token) return token;
+    
+    // Fallback to cookie
     const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
+    const parts = value.split(`; access_token=`);
     if (parts.length === 2) return parts.pop().split(';').shift();
+    
     return null;
 }
 
@@ -147,7 +153,7 @@ let state = {
 
 // ✅ FIX: Helper function to get token with auto-redirect
 function getToken() {
-    const token = getCookie('access_token');
+    const token = getToken();
     if (!token) {
         console.log('No token - redirecting to login');
         window.location.href = '/login';
