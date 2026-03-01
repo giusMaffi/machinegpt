@@ -98,15 +98,24 @@ def create_machine():
 @token_required
 def list_machines():
     """
-    List all machines for this producer
+    List machines accessible by current user (filtered by machine_ids)
     
     Query params:
     - status: filter by status (pending_activation, activated, etc)
     - model_id: filter by model
     """
     try:
-        # Filters
-        query = MachineInstance.query.filter_by(producer_id=g.producer_id)
+        # Filter by user's authorized machine_ids
+        authorized_ids = g.get('machine_ids', [])
+        
+        if not authorized_ids:
+            return jsonify({'machines': [], 'total': 0}), 200
+        
+        # Base query: only authorized machines
+        query = MachineInstance.query.filter(
+            MachineInstance.id.in_(authorized_ids),
+            MachineInstance.producer_id == g.producer_id
+        )
         
         status = request.args.get('status')
         if status:

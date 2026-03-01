@@ -152,16 +152,6 @@ let state = {
 };
 
 // ✅ FIX: Helper function to get token with auto-redirect
-function getToken() {
-    const token = getToken();
-    if (!token) {
-        console.log('No token - redirecting to login');
-        window.location.href = '/login';
-        return null;
-    }
-    return token;
-}
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Chat page loaded');
@@ -184,7 +174,7 @@ async function loadMachines() {
         const token = getToken();
         if (!token) return; // Already redirected
         
-        const response = await fetch('/api/machines', {
+        const response = await fetch('/api/admin/machines', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }

@@ -3,7 +3,7 @@ import jwt
 import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import request, g, jsonify, current_app
+from flask import request, g, jsonify, current_app, session
 from app.models.query import RefreshToken
 
 
@@ -81,8 +81,10 @@ def token_required(f):
     def decorated(*args, **kwargs):
         token = None
         
-        # Extract token from header OR cookie
-        if 'Authorization' in request.headers:
+        # Extract token from session (priority), header, or cookie
+        if 'access_token' in session:
+            token = session.get('access_token')
+        elif 'Authorization' in request.headers:
             try:
                 token = request.headers['Authorization'].split(' ')[1]
             except IndexError:

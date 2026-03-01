@@ -90,19 +90,9 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
             throw new Error(data.error || 'Login failed');
         }
         
-        console.log('Saving tokens...');
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-        
-        console.log('Token saved:', localStorage.getItem('access_token') ? 'YES' : 'NO');
-        
-        // FIX: Delay redirect to ensure localStorage commits
-        console.log('Waiting before redirect...');
-        setTimeout(function() {
-            console.log('Redirecting to /chat...');
-            window.location.href = '/chat';
-        }, 300);
+        // Server stores token in session - just redirect
+        console.log('Login successful! Redirecting...');
+        window.location.href = data.redirect;
         
     } catch (error) {
         console.error('Login error:', error);
