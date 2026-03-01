@@ -1,5 +1,5 @@
 """Authentication Routes"""
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 from app import db
 from app.models.customer import User
 from app.models.producer import ProducerAdmin
@@ -14,6 +14,12 @@ from datetime import datetime
 import hashlib
 
 bp = Blueprint('auth', __name__)
+
+
+@bp.route('/login', methods=['GET'])
+def login_page():
+    """Render login page"""
+    return render_template('login.html')
 
 
 @bp.route('/login', methods=['POST'])

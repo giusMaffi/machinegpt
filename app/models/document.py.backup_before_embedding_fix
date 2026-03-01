@@ -93,9 +93,6 @@ class DocumentChunk(db.Model):
     # Vector DB
     vector_id = db.Column(db.String(255), nullable=False)
     
-    # ✅ FIX: Add embedding column (exists in DB, was missing from model)
-    embedding = db.Column(db.JSON)
-    
     # Timestamp
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     

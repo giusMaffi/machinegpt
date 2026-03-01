@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - MachineGPT{% endblock %}
+
+{% block content %}
+<div id="chatApp" class="h-screen flex flex-col">
+    
+    <!-- Header -->
+    <header class="bg-white border-b px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold text-gray-900">MachineGPT</h1>
+            <div id="headerMachineInfo" class="flex items-center gap-2 text-sm hidden">
+                <span class="text-gray-400">•</span>
+                <span id="headerModelName" class="font-medium"></span>
+                <span id="headerSerial" class="text-gray-500 text-xs"></span>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-gray-600">Support Assistant</span>
+            <button onclick="logout()" class="text-sm text-gray-500 hover:text-gray-700">
+                Logout
+            </button>
+        </div>
+    </header>
+    
+    <!-- Main Container -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Machine Selector Sidebar -->
+        <aside class="w-64 bg-white border-r flex flex-col overflow-hidden">
+            <div class="p-4 border-b">
+                <h2 class="font-semibold text-gray-900">Your Machines</h2>
+                <p class="text-xs text-gray-500 mt-1">Select a machine to start</p>
+            </div>
+            
+            <div id="machinesList" class="flex-1 overflow-y-auto custom-scrollbar">
+                <!-- Machines will be inserted here -->
+            </div>
+        </aside>
+        
+        <!-- Chat Area -->
+        <main class="flex-1 flex flex-col bg-gray-50">
+            
+            <!-- Welcome Screen -->
+            <div id="welcomeScreen" class="flex-1 flex items-center justify-center">
+                <div class="text-center max-w-md">
+                    <div class="text-6xl mb-4">🤖</div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Welcome to MachineGPT</h2>
+                    <p class="text-gray-600 mb-6">
+                        Select a machine from the sidebar to start asking questions about maintenance, troubleshooting, and operations.
+                    </p>
+                    <div class="text-sm text-gray-500">
+                        <p>💡 Tip: You can ask questions like:</p>
+                        <ul class="mt-2 space-y-1 text-left inline-block">
+                            <li>• "How do I change the air filter?"</li>
+                            <li>• "What does error code E42 mean?"</li>
+                            <li>• "How often should I perform maintenance?"</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Interface -->
+            <div id="chatInterface" class="hidden flex-1 flex flex-col">
+                <!-- Messages Container -->
+                <div id="messagesContainer" class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4" style="height: calc(100vh - 200px);">
+                    <!-- Messages will be inserted here -->
+                </div>
+                
+                <!-- Input Area -->
+                <div class="border-t bg-white p-4">
+                    <form id="messageForm" class="flex gap-2">
+                        <input 
+                            id="messageInput"
+                            type="text"
+                            placeholder="Ask a question about your machine..."
+                            class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button 
+                            id="sendButton"
+                            type="submit"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Send
+                        </button>
+                    </form>
+                    
+                    <!-- Suggested Questions -->
+                    <div id="suggestedQuestions" class="mt-3">
+                        <div class="text-xs text-gray-500 mb-2">💡 Try asking:</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="setSuggestion('How do I perform routine maintenance?')" class="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors">
+                                Routine maintenance
+                            </button>
+                            <button onclick="setSuggestion('What are common error codes?')" class="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors">
+                                Error codes
+                            </button>
+                            <button onclick="setSuggestion('How do I troubleshoot low pressure?')" class="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors">
+                                Troubleshooting
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg hidden"></div>
+
+<!-- Error Display -->
+<div id="errorBanner" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg hidden" style="max-width: 500px; z-index: 1000;">
+    <div class="flex items-start gap-2">
+        <span class="text-red-600 text-xl">⚠️</span>
+        <div class="flex-1">
+            <div class="font-medium text-red-900">Error</div>
+            <div id="errorText" class="text-sm text-red-700 mt-1"></div>
+        </div>
+        <button onclick="hideError()" class="text-red-600 hover:text-red-800 text-xl leading-none">×</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Global state
+let state = {
+    machines: [],
+    selectedMachineId: null,
+    selectedMachine: null,
+    messages: [],
+    isLoading: false
+};
+
+// ✅ FIX: Helper function to get token with auto-redirect
+function getToken() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        console.log('No token - redirecting to login');
+        window.location.href = '/login';
+        return null;
+    }
+    return token;
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Chat page loaded');
+    loadMachines();
+    
+    // Setup form handler
+    document.getElementById('messageForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendMessage();
+    });
+});
+
+async function loadMachines() {
+    console.log('Loading machines...');
+    const machinesList = document.getElementById('machinesList');
+    machinesList.innerHTML = '<div class="p-4 text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div><p class="text-sm text-gray-500 mt-2">Loading machines...</p></div>';
+    
+    try {
+        // ✅ FIX: Use getToken() helper
+        const token = getToken();
+        if (!token) return; // Already redirected
+        
+        const response = await fetch('/api/machines', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        console.log('Machines response status:', response.status);
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                console.log('Unauthorized - redirecting to login');
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error('Failed to load machines');
+        }
+        
+        const data = await response.json();
+        console.log('Machines data:', data);
+        
+        state.machines = data.machines || [];
+        
+        if (state.machines.length === 0) {
+            machinesList.innerHTML = '<div class="p-4 text-center text-gray-500 text-sm">No machines found</div>';
+            return;
+        }
+        
+        // Render machines
+        machinesList.innerHTML = '';
+        state.machines.forEach(machine => {
+            const div = document.createElement('div');
+            div.className = 'p-4 cursor-pointer transition-colors border-l-4 border-transparent hover:bg-gray-50';
+            div.onclick = () => selectMachine(machine);
+            div.innerHTML = `
+                <div class="font-medium text-gray-900">${machine.model_name}</div>
+                <div class="text-xs text-gray-500 mt-1">${machine.serial_number}</div>
+                ${machine.installation_site ? `<div class="text-xs text-gray-400 mt-1">${machine.installation_site}</div>` : ''}
+            `;
+            div.dataset.machineId = machine.id;
+            machinesList.appendChild(div);
+        });
+        
+        // Auto-select first machine
+        selectMachine(state.machines[0]);
+        
+    } catch (err) {
+        console.error('Load machines error:', err);
+        showError('Failed to load machines. Please refresh the page.');
+        machinesList.innerHTML = '<div class="p-4 text-center text-red-500 text-sm">Failed to load</div>';
+    }
+}
+
+function selectMachine(machine) {
+    console.log('Selecting machine:', machine.id);
+    
+    state.selectedMachineId = machine.id;
+    state.selectedMachine = machine;
+    state.messages = [];
+    
+    // Update header
+    document.getElementById('headerModelName').textContent = machine.model_name;
+    document.getElementById('headerSerial').textContent = machine.serial_number;
+    document.getElementById('headerMachineInfo').classList.remove('hidden');
+    
+    // Update sidebar selection
+    document.querySelectorAll('#machinesList > div').forEach(div => {
+        if (parseInt(div.dataset.machineId) === machine.id) {
+            div.className = 'p-4 cursor-pointer transition-colors bg-blue-50 border-l-4 border-blue-600';
+        } else {
+            div.className = 'p-4 cursor-pointer transition-colors border-l-4 border-transparent hover:bg-gray-50';
+        }
+    });
+    
+    // Show chat interface
+    document.getElementById('welcomeScreen').classList.add('hidden');
+    document.getElementById('chatInterface').classList.remove('hidden');
+    
+    // Load history
+    loadHistory();
+}
+
+async function loadHistory() {
+    console.log('Loading history for machine:', state.selectedMachineId);
+    
+    try {
+        // ✅ FIX: Use getToken() helper
+        const token = getToken();
+        if (!token) return; // Already redirected
+        
+        const response = await fetch(`/api/chat/history?machine_id=${state.selectedMachineId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error('Failed to load history');
+        }
+        
+        const data = await response.json();
+        console.log('History data:', data);
+        state.messages = data.history || [];
+        renderMessages();
+    } catch (err) {
+        console.error('Load history error:', err);
+        // Don't show error for history load failure - just show empty chat
+        renderMessages();
+    }
+}
+
+async function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const question = input.value.trim();
+    
+    if (!question || state.isLoading || !state.selectedMachineId) {
+        return;
+    }
+    
+    console.log('Sending message:', question);
+    
+    input.value = '';
+    hideError();
+    
+    // Add user message
+    const userMessage = {
+        id: Date.now(),
+        type: 'user',
+        question: question,
+        created_at: new Date().toISOString()
+    };
+    state.messages.push(userMessage);
+    renderMessages();
+    
+    // Hide suggestions
+    document.getElementById('suggestedQuestions').style.display = 'none';
+    
+    state.isLoading = true;
+    document.getElementById('sendButton').disabled = true;
+    document.getElementById('sendButton').textContent = 'Sending...';
+    
+    // Show loading indicator
+    showLoading();
+    
+    try {
+        // ✅ FIX: Use getToken() helper
+        const token = getToken();
+        if (!token) return; // Already redirected
+        
+        const response = await fetch('/api/query/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                question: question,
+                machine_id: state.selectedMachineId
+            })
+        });
+        
+        console.log('Query response status:', response.status);
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                showError('Session expired. Please log in again.');
+                setTimeout(() => window.location.href = '/login', 2000);
+                return;
+            } else if (response.status === 403) {
+                showError("You don't have access to this machine.");
+                return;
+            }
+            throw new Error('Query failed');
+        }
+        
+        const data = await response.json();
+        console.log('Query response data:', data);
+        
+        // Add AI message
+        const aiMessage = {
+            id: data.query_id || Date.now() + 1,
+            type: 'ai',
+            question: question,
+            answer: data.answer,
+            sources: data.sources || [],
+            metadata: data.metadata || {},
+            created_at: new Date().toISOString(),
+            feedback: null
+        };
+        
+        state.messages.push(aiMessage);
+        renderMessages();
+        
+        input.focus();
+        
+    } catch (err) {
+        console.error('Send message error:', err);
+        showError('Failed to send message. Please try again.');
+    } finally {
+        state.isLoading = false;
+        document.getElementById('sendButton').disabled = false;
+        document.getElementById('sendButton').textContent = 'Send';
+        hideLoading();
+    }
+}
+
+function renderMessages() {
+    const container = document.getElementById('messagesContainer');
+    container.innerHTML = '';
+    
+    if (state.messages.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-4xl mb-3">💬</div>
+                <p class="text-gray-500">No messages yet. Ask your first question!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    state.messages.forEach(message => {
+        const div = document.createElement('div');
+        
+        if (message.type === 'user' || !message.answer) {
+            div.innerHTML = `
+                <div class="flex justify-end">
+                    <div class="max-w-2xl bg-blue-600 text-white rounded-lg px-4 py-3 shadow-sm">
+                        <p>${escapeHtml(message.question)}</p>
+                        <div class="text-xs opacity-75 mt-1">${formatTime(message.created_at)}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="flex justify-start">
+                    <div class="max-w-3xl bg-white border rounded-lg px-4 py-3 shadow-sm">
+                        <div class="prose prose-sm">${formatMarkdown(message.answer)}</div>
+                        
+                        ${message.sources && message.sources.length > 0 ? `
+                            <div class="mt-3 pt-3 border-t">
+                                <div class="text-xs font-medium text-gray-500 mb-2">📚 Sources:</div>
+                                ${message.sources.map(source => `
+                                    <div class="text-xs bg-gray-50 rounded px-2 py-1 mb-1">
+                                        <span class="text-gray-600">Page ${source.page}</span>
+                                        <span class="text-gray-400 ml-1">(${Math.round((source.similarity_score || 0) * 100)}% match)</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        
+                        ${message.metadata ? `
+                            <div class="mt-2 text-xs text-gray-400">
+                                ${formatTime(message.created_at)} • ${message.metadata.response_time_ms}ms
+                            </div>
+                        ` : ''}
+                        
+                        <div class="mt-3 flex items-center gap-2">
+                            <button onclick="submitFeedback(${message.id}, 1)" class="text-lg transition-opacity ${message.feedback === 1 ? 'opacity-100' : 'opacity-50 hover:opacity-100'}" title="Helpful">👍</button>
+                            <button onclick="submitFeedback(${message.id}, -1)" class="text-lg transition-opacity ${message.feedback === -1 ? 'opacity-100' : 'opacity-50 hover:opacity-100'}" title="Not helpful">👎</button>
+                            <button onclick="copyToClipboard(\`${(message.answer || '').replace(/`/g, '\\`')}\`)" class="text-sm text-gray-500 hover:text-gray-700 ml-2" title="Copy answer">📋 Copy</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.appendChild(div);
+    });
+    
+    scrollToBottom();
+}
+
+function showLoading() {
+    const container = document.getElementById('messagesContainer');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loadingIndicator';
+    loadingDiv.className = 'flex justify-start';
+    loadingDiv.innerHTML = `
+        <div class="bg-white border rounded-lg px-4 py-3 shadow-sm">
+            <div class="flex gap-1">
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 100ms"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 200ms"></div>
+            </div>
+        </div>
+    `;
+    container.appendChild(loadingDiv);
+    scrollToBottom();
+}
+
+function hideLoading() {
+    const loading = document.getElementById('loadingIndicator');
+    if (loading) loading.remove();
+}
+
+async function submitFeedback(queryId, vote) {
+    try {
+        const token = getToken();
+        if (!token) return;
+        
+        const response = await fetch('/api/query/feedback', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                query_id: queryId,
+                feedback: vote
+            })
+        });
+        
+        if (response.ok) {
+            const message = state.messages.find(m => m.id === queryId);
+            if (message) {
+                message.feedback = vote;
+                renderMessages();
+            }
+            showToast(vote === 1 ? 'Thanks for the feedback! 👍' : 'Thanks for the feedback! 👎');
+        }
+    } catch (err) {
+        console.error('Feedback error:', err);
+    }
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('Copied to clipboard! 📋');
+    } catch (err) {
+        console.error('Copy failed:', err);
+        showToast('Failed to copy');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+}
+
+function setSuggestion(text) {
+    document.getElementById('messageInput').value = text;
+    document.getElementById('messageInput').focus();
+}
+
+function formatTime(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('it-IT', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function formatMarkdown(text) {
+    if (!text) return '';
+    return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function scrollToBottom() {
+    const container = document.getElementById('messagesContainer');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 3000);
+}
+
+function showError(message) {
+    document.getElementById('errorText').textContent = message;
+    document.getElementById('errorBanner').classList.remove('hidden');
+}
+
+function hideError() {
+    document.getElementById('errorBanner').classList.add('hidden');
+}
+</script>
+{% endblock %}

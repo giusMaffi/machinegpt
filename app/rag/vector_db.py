@@ -1,70 +1,65 @@
-"""Pinecone Vector DB"""
-from flask import current_app
+"""PostgreSQL-based vector search with cached embeddings"""
+from app import db
+from app.models.document import DocumentChunk, Document
+from app.rag.embeddings import generate_query_embedding
+import numpy as np
+import json
 
-def get_pinecone_index():
-    """Get Pinecone index"""
-    try:
-        from pinecone import Pinecone
-        
-        pc = Pinecone(api_key=current_app.config['PINECONE_API_KEY'])
-        index = pc.Index(current_app.config['PINECONE_INDEX_NAME'])
-        
-        return index
-    except Exception as e:
-        print(f"Pinecone error: {e}")
-        return None
-
-
-def upsert_chunks(chunks, document_id, producer_id):
-    """Upsert chunks to Pinecone"""
-    index = get_pinecone_index()
-    if not index:
-        return False
+def search_similar(query_embedding, producer_id, model_id=None, top_k=5):
+    print(f"🔍 Searching: producer={producer_id}, model={model_id}")
     
-    namespace = f"producer_{producer_id}"
-    vectors = []
+    # Get all chunks for producer/model
+    query = db.session.query(DocumentChunk, Document).join(
+        Document, DocumentChunk.document_id == Document.id
+    ).filter(Document.producer_id == producer_id)
     
-    for chunk in chunks:
-        vector_id = f"doc_{document_id}_chunk_{chunk['chunk_index']}"
-        
-        vectors.append({
-            'id': vector_id,
-            'values': chunk['embedding'],
-            'metadata': {
-                'text': chunk['text'],
-                'doc_id': document_id,
-                'page': chunk.get('page'),
-                'source_reference': chunk.get('source_reference')
-            }
-        })
+    if model_id:
+        query = query.filter(Document.model_id == model_id)
     
-    index.upsert(vectors=vectors, namespace=namespace)
-    return True
-
-
-def search_similar(query_embedding, producer_id, top_k=5):
-    """Search similar chunks"""
-    index = get_pinecone_index()
-    if not index:
+    all_chunks = query.all()
+    print(f"📦 Found {len(all_chunks)} chunks in DB")
+    
+    if not all_chunks:
+        print("⚠️  No chunks found!")
         return []
     
-    namespace = f"producer_{producer_id}"
+    # Use CACHED embeddings from DB
+    print(f"🔮 Using cached embeddings...")
     
-    results = index.query(
-        vector=query_embedding,
-        namespace=namespace,
-        top_k=top_k,
-        include_metadata=True
-    )
-    
-    chunks = []
-    for match in results.matches:
-        chunks.append({
-            'text': match.metadata.get('text'),
-            'doc_id': match.metadata.get('doc_id'),
-            'page': match.metadata.get('page'),
-            'source_reference': match.metadata.get('source_reference'),
-            'score': match.score
+    scores = []
+    for chunk, doc in all_chunks:
+        if not chunk.embedding:
+            print(f"⚠️  Chunk {chunk.id} missing embedding, skipping")
+            continue
+        
+        # Parse stored embedding
+        chunk_embedding = json.loads(chunk.embedding)
+        
+        # Calculate cosine similarity
+        similarity = cosine_similarity(query_embedding, chunk_embedding)
+        scores.append({
+            'text': chunk.chunk_text,
+            'doc_id': doc.id,
+            'page': chunk.chunk_metadata.get('page') if chunk.chunk_metadata else None,
+            'source_reference': chunk.source_reference,
+            'score': similarity
         })
     
-    return chunks
+    # Sort by similarity
+    scores.sort(key=lambda x: x['score'], reverse=True)
+    
+    print(f"🎯 Returning top {min(top_k, len(scores))} results")
+    for i, s in enumerate(scores[:top_k]):
+        print(f"  {i+1}. Score: {s['score']:.3f}, Page: {s['page']}")
+    
+    return scores[:top_k]
+
+def cosine_similarity(a, b):
+    """Calculate cosine similarity"""
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def upsert_chunks(*args, **kwargs):
+    """Dummy for compatibility"""
+    pass

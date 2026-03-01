@@ -3,12 +3,22 @@ import time
 import os
 from app.rag.embeddings import generate_query_embedding
 from app.rag.vector_db import search_similar
+from app.models.machine import MachineInstance
 
 class RAGEngine:
     
     def query(self, question, producer_id, machine_id=None):
         """Execute RAG query"""
         start_time = time.time()
+        
+        # Get model_id from machine
+        model_id = None
+        if machine_id:
+            machine = MachineInstance.query.get(machine_id)
+            if machine:
+                model_id = machine.model_id
+        
+        print(f"🚀 RAG Query: question='{question}', producer={producer_id}, machine={machine_id}, model={model_id}")
         
         # 1. Generate query embedding
         query_embedding = generate_query_embedding(question)
@@ -17,12 +27,14 @@ class RAGEngine:
         
         retrieval_time = int((time.time() - start_time) * 1000)
         
-        # 2. Search similar chunks
-        chunks = search_similar(query_embedding, producer_id)
+        # 2. Search with model_id filter
+        print(f"🎯 About to call search_similar: producer={producer_id}, model={model_id}")
+        chunks = search_similar(query_embedding, producer_id, model_id=model_id)
+        print(f"📦 Got {len(chunks)} chunks back from search_similar")
         
         if not chunks:
             return {
-                'answer': 'No relevant information found.',
+                'answer': "I don't have information about that in the documentation.",
                 'sources': [],
                 'response_time_ms': int((time.time() - start_time) * 1000)
             }
@@ -65,9 +77,7 @@ class RAGEngine:
                 max_tokens=1000,
                 temperature=0.3,
                 system=context,
-                messages=[
-                    {"role": "user", "content": question}
-                ]
+                messages=[{"role": "user", "content": question}]
             )
             
             return {
@@ -78,10 +88,10 @@ class RAGEngine:
             
         except Exception as e:
             print(f"Claude error: {e}")
-            return {'text': f'Error generating response: {str(e)}'}
+            return {'text': f'Error: {str(e)}'}
     
     def _format_sources(self, chunks):
-        """Format sources for response"""
+        """Format sources"""
         sources = []
         for chunk in chunks[:3]:
             sources.append({

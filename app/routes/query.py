@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models.query import Query
 from app.utils.auth import token_required
-from app.utils.rag import RAGEngine
+from app.rag.engine import RAGEngine
 
 bp = Blueprint('query', __name__)
 

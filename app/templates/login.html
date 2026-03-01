@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MachineGPT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center px-4">
+    <div class="max-w-md w-full">
+        <!-- Logo/Header -->
+        <div class="text-center mb-8">
+            <div class="text-5xl mb-4">🤖</div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">MachineGPT</h1>
+            <p class="text-gray-600">AI-Powered Technical Support</p>
+        </div>
+        
+        <!-- Login Card -->
+        <div class="bg-white rounded-lg shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-900 mb-6">Sign In</h2>
+            
+            <!-- Login Form -->
+            <form id="loginForm">
+                <div class="space-y-4">
+                    <!-- Email -->
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+                            Email Address
+                        </label>
+                        <input
+                            type="email"
+                            id="email"
+                            required
+                            autocomplete="email"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="your.email@company.com"
+                        />
+                    </div>
+                    
+                    <!-- Password -->
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+                            Password
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            required
+                            autocomplete="current-password"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
+                    </div>
+                    
+                    <!-- Submit Button -->
+                    <button
+                        type="submit"
+                        id="submitBtn"
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                        Sign In
+                    </button>
+                </div>
+                
+                <!-- Error Display -->
+                <div id="errorMessage" class="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 hidden">
+                    <p class="text-sm text-red-800"></p>
+                </div>
+            </form>
+            
+            <!-- Demo Accounts -->
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <p class="text-xs text-gray-500 text-center mb-3">Demo Accounts:</p>
+                <div class="space-y-2 text-xs">
+                    <div class="bg-gray-50 rounded p-2">
+                        <p class="font-medium text-gray-700">Barilla Operator</p>
+                        <p class="text-gray-600">paolo.bianchi@barilla.com</p>
+                    </div>
+                    <p class="text-gray-500 text-center mt-2">Password: <span class="font-mono">demo123</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <p class="text-center text-sm text-gray-600 mt-6">
+            Need help? Contact your machinery provider
+        </p>
+    </div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const errorDiv = document.getElementById('errorMessage');
+    const errorText = errorDiv.querySelector('p');
+    
+    // Get form data
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    
+    // Disable button
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in...';
+    errorDiv.classList.add('hidden');
+    
+    console.log('Starting login...');
+    console.log('Email:', email);
+    
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: email,
+                password: password
+            })
+        });
+        
+        console.log('Response status:', response.status);
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Login failed');
+        }
+        
+        // Save tokens
+        console.log('Saving tokens...');
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+        
+        if (data.user) {
+            localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        
+        // Verify saved
+        const savedToken = localStorage.getItem('access_token');
+        console.log('Token saved:', savedToken ? 'YES' : 'NO');
+        console.log('Token preview:', savedToken ? savedToken.substring(0, 50) + '...' : 'NONE');
+        
+        // ✅ FIX: Wait 100ms for localStorage to commit before redirect
+        console.log('Waiting for localStorage commit...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Redirect
+        console.log('Redirecting to /chat...');
+        window.location.href = '/chat';
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        errorText.textContent = error.message || 'Network error. Please try again.';
+        errorDiv.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+    }
+});
+</script>
+</body>
+</html>

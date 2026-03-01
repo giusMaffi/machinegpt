@@ -1,13 +1,10 @@
 """Admin Routes"""
 from flask import Blueprint, request, jsonify, g
 from app import db
-from app.models.document import Document, DocumentChunk
+from app.models.document import Document
 from app.utils.auth import token_required
-from app.utils.storage import save_uploaded_file
-from app.ingestion.processors import DocumentProcessor
-from app.rag.embeddings import generate_embeddings
-from app.rag.vector_db import upsert_chunks
-import hashlib
+from app.utils.document_processor import process_pdf_document
+import os
 
 bp = Blueprint('admin', __name__)
 
@@ -19,84 +16,43 @@ def upload_document():
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
+    producer_id = g.producer_id
+    model_id = request.form.get('model_id', type=int)
     title = request.form.get('title', file.filename)
     doc_type = request.form.get('doc_type', 'manual')
+    language = request.form.get('language', 'en')
+    
+    if not model_id:
+        return jsonify({'error': 'model_id required'}), 400
     
     # Save file
-    file_path = save_uploaded_file(file, g.producer_id)
+    upload_dir = f'data/raw/producer_{producer_id}'
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+    file.save(file_path)
     
-    # Calculate hash
-    file.seek(0)
-    file_hash = hashlib.sha256(file.read()).hexdigest()
-    
-    # Create document record
-    doc = Document(
-        producer_id=g.producer_id,
-        title=title,
-        doc_type=doc_type,
-        file_type='pdf',
-        mime_type=file.content_type,
-        file_extension='.pdf',
-        original_filename=file.filename,
-        file_hash=file_hash,
-        file_path=file_path,
-        source_type='admin_upload',
-        processing_status='processing'
-    )
-    db.session.add(doc)
-    db.session.commit()
-    
-    # Process PDF
     try:
-        processor = DocumentProcessor()
-        chunks, total_pages = processor.process_pdf(file_path)
+        # Process using CORRECT function
+        doc = process_pdf_document(
+            file_path=file_path,
+            producer_id=producer_id,
+            model_id=model_id,
+            doc_type=doc_type,
+            language=language,
+            title=title
+        )
         
-        doc.total_pages = total_pages
-        
-        # Generate embeddings
-        texts = [chunk['text'] for chunk in chunks]
-        embeddings = generate_embeddings(texts)
-        
-        if not embeddings:
-            doc.processing_status = 'failed'
-            doc.processing_error = 'Failed to generate embeddings'
-            db.session.commit()
-            return jsonify({'error': 'Embedding failed'}), 500
-        
-        # Add embeddings to chunks
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk['embedding'] = embedding
-        
-        # Upsert to Pinecone
-        upsert_chunks(chunks, doc.id, g.producer_id)
-        
-        # Save chunks to DB
-        for chunk in chunks:
-            db_chunk = DocumentChunk(
-                document_id=doc.id,
-                chunk_index=chunk['chunk_index'],
-                chunk_text=chunk['text'],
-                source_reference=chunk['source_reference'],
-                chunk_metadata={'page': chunk['page']},
-                vector_id=f"doc_{doc.id}_chunk_{chunk['chunk_index']}"
-            )
-            db.session.add(db_chunk)
-        
-        doc.total_chunks = len(chunks)
-        doc.processing_status = 'completed'
         db.session.commit()
         
         return jsonify({
             'document_id': doc.id,
             'status': 'completed',
-            'total_pages': total_pages,
-            'total_chunks': len(chunks)
+            'total_pages': doc.total_pages,
+            'total_chunks': doc.total_chunks
         }), 201
         
     except Exception as e:
-        doc.processing_status = 'failed'
-        doc.processing_error = str(e)
-        db.session.commit()
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
@@ -107,5 +63,11 @@ def list_documents():
     docs = Document.query.filter_by(producer_id=g.producer_id).all()
     
     return jsonify({
-        'documents': [doc.to_dict() for doc in docs]
+        'documents': [{
+            'id': doc.id,
+            'title': doc.title,
+            'doc_type': doc.doc_type,
+            'total_chunks': doc.total_chunks,
+            'status': doc.processing_status
+        } for doc in docs]
     }), 200

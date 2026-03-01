@@ -1,113 +1,123 @@
-"""Document upload and management routes"""
-import os
-import hashlib
+"""
+Document Management Routes
+Handles document upload, processing status, and retrieval
+"""
+
 from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
+import os
 from app import db
-from app.models import Document
+from app.models.document import Document
 from app.utils.auth import token_required
-from app.utils.document_processor import process_document
+from app.utils.document_processor import process_pdf_document
 
-bp = Blueprint('documents', __name__)
+bp = Blueprint('documents', __name__, url_prefix='/api/documents')
 
-ALLOWED_EXTENSIONS = {'pdf', 'txt', 'doc', 'docx'}
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def calculate_file_hash(file_path):
-    """Calculate SHA256 hash of file"""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
 
 @bp.route('/upload', methods=['POST'])
 @token_required
 def upload_document():
-    """Upload and process document"""
+    """Upload and process a document"""
     
-    # Check file
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({'error': 'Empty filename'}), 400
     
     if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
+        return jsonify({'error': 'Invalid file type. Allowed: PDF, DOCX, TXT'}), 400
     
-    # Get metadata
-    doc_name = request.form.get('doc_name', file.filename)
-    model_id = request.form.get('model_id', 1)
+    # Get parameters
+    producer_id = g.producer_id
+    model_id = request.form.get('model_id', type=int)
+    doc_type = request.form.get('doc_type', 'manual')
+    language = request.form.get('language', 'en')
+    title = request.form.get('title')
+    
+    if not model_id:
+        return jsonify({'error': 'model_id required'}), 400
+    
+    # Save file
+    filename = secure_filename(file.filename)
+    upload_dir = f'data/raw/producer_{producer_id}'
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_path = os.path.join(upload_dir, filename)
+    file.save(file_path)
     
     try:
-        # Save file temporarily
-        filename = secure_filename(file.filename)
-        temp_path = f'/tmp/{filename}'
-        file.save(temp_path)
-        
-        # Extract file info
-        file_extension = os.path.splitext(filename)[1].lower()
-        mime_type = file.content_type or 'application/octet-stream'
-        file_size = os.path.getsize(temp_path)
-        file_hash = calculate_file_hash(temp_path)
-        
-        # Determine file type
-        file_type_map = {
-            '.pdf': 'pdf',
-            '.txt': 'text',
-            '.doc': 'document',
-            '.docx': 'document'
-        }
-        file_type = file_type_map.get(file_extension, 'unknown')
-        
-        # Create document record
-        document = Document(
-            producer_id=g.producer_id,
-            model_id=int(model_id),
-            title=doc_name,
-            original_filename=filename,
-            file_type=file_type,
-            mime_type=mime_type,
-            file_extension=file_extension,
-            file_hash=file_hash,
-            file_size_bytes=file_size,
-            file_path=temp_path,
-            source_type='manual_upload',
-            doc_type='manual',
-            processing_status='processing'
-        )
-        db.session.add(document)
-        db.session.flush()
-        
-        # Process document (chunking + embeddings + pinecone)
-        result = process_document(
-            file_path=temp_path,
-            document_id=document.id,
-            producer_id=g.producer_id,
-            doc_name=doc_name
+        # Process document
+        doc = process_pdf_document(
+            file_path=file_path,
+            producer_id=producer_id,
+            model_id=model_id,
+            doc_type=doc_type,
+            language=language,
+            title=title
         )
         
-        # Update document
-        document.processing_status = 'completed'
-        document.total_chunks = result['total_chunks']
         db.session.commit()
         
-        # Cleanup
-        os.remove(temp_path)
-        
         return jsonify({
-            'document_id': document.id,
-            'status': 'completed',
-            'chunks_created': result['total_chunks'],
-            'message': 'Document uploaded and processed successfully'
+            'document_id': doc.id,
+            'title': doc.title,
+            'status': doc.processing_status,
+            'total_chunks': doc.total_chunks
         }), 201
         
     except Exception as e:
         db.session.rollback()
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/<int:document_id>', methods=['GET'])
+@token_required
+def get_document(document_id):
+    """Get document details"""
+    
+    doc = Document.query.filter_by(
+        id=document_id,
+        producer_id=g.producer_id
+    ).first()
+    
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+    
+    return jsonify({
+        'id': doc.id,
+        'title': doc.title,
+        'doc_type': doc.doc_type,
+        'language': doc.language,
+        'total_pages': doc.total_pages,
+        'total_chunks': doc.total_chunks,
+        'processing_status': doc.processing_status,
+        'created_at': doc.created_at.isoformat() if doc.created_at else None
+    })
+
+
+@bp.route('', methods=['GET'])
+@token_required
+def list_documents():
+    """List all documents for producer"""
+    
+    docs = Document.query.filter_by(
+        producer_id=g.producer_id
+    ).order_by(Document.created_at.desc()).all()
+    
+    return jsonify({
+        'documents': [{
+            'id': doc.id,
+            'title': doc.title,
+            'doc_type': doc.doc_type,
+            'total_chunks': doc.total_chunks,
+            'status': doc.processing_status,
+            'created_at': doc.created_at.isoformat() if doc.created_at else None
+        } for doc in docs]
+    })

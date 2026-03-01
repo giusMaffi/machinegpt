@@ -1,44 +1,46 @@
-"""Chat Routes"""
-from flask import Blueprint, request, jsonify, g
-from app import db
+"""Chat routes"""
+from flask import Blueprint, render_template, request, jsonify, g
 from app.models.query import Query
-from app.utils.auth import token_required, machine_access_required
-from app.rag.engine import RAGEngine
+from app.utils.auth import token_required
 
 bp = Blueprint('chat', __name__)
 
-@bp.route('/query', methods=['POST'])
+@bp.route('/chat')
 @token_required
-@machine_access_required
-def query():
-    """Query AI"""
-    data = request.json
-    question = data.get('question')
+def chat_interface():
+    """Render chat interface"""
+    return render_template('chat.html')
+
+@bp.route('/api/chat/history')
+@token_required
+def chat_history():
+    """Get chat history for a machine"""
+    machine_id = request.args.get('machine_id', type=int)
     
-    if not question:
-        return jsonify({'error': 'Question required'}), 400
+    if not machine_id:
+        return jsonify({'error': 'machine_id required'}), 400
     
-    # Execute RAG
-    rag = RAGEngine()
-    result = rag.query(
-        question=question,
-        producer_id=g.producer_id,
-        machine_id=g.current_machine_id
-    )
+    # Security check
+    if not hasattr(g, 'machine_ids') or machine_id not in g.machine_ids:
+        return jsonify({'error': 'Access denied'}), 403
     
-    # Save query to DB
-    query_record = Query(
-        producer_id=g.producer_id,
-        user_id=g.current_user_id,
-        machine_instance_id=g.current_machine_id,
-        question=question,
-        answer=result.get('answer'),
-        sources=result.get('sources'),
-        response_time_ms=result.get('response_time_ms'),
-        tokens_input=result.get('tokens_input'),
-        tokens_output=result.get('tokens_output')
-    )
-    db.session.add(query_record)
-    db.session.commit()
+    queries = Query.query.filter_by(
+        machine_instance_id=machine_id
+    ).order_by(Query.created_at.desc()).limit(50).all()
     
-    return jsonify(result), 200
+    history = []
+    for q in queries:
+        history.append({
+            'id': q.id,
+            'question': q.question,
+            'answer': q.answer,
+            'sources': q.sources or [],
+            'feedback': q.feedback,
+            'metadata': {
+                'response_time_ms': q.response_time_ms or 0,
+                'tokens_used': (q.tokens_input or 0) + (q.tokens_output or 0)
+            },
+            'created_at': q.created_at.isoformat()
+        })
+    
+    return jsonify({'history': history})

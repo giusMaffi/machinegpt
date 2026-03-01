@@ -133,6 +133,9 @@ def hash_password(password):
 
 
 def verify_password(password, password_hash):
-    """Verify password"""
+    """Verify password - FIX: bcrypt expects string hash, not encoded bytes"""
     import bcrypt
-    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    # password_hash from DB is already a string like '$2b$12$...'
+    # bcrypt.checkpw needs: bytes password, bytes hash
+    # So we encode the password but keep hash as string (bcrypt handles it)
+    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8') if isinstance(password_hash, str) else password_hash)
